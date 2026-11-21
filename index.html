@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Spinning News — 실시간 글로벌 뉴스 레이더</title>
+  <meta name="description" content="3D 지구본 위에서 세계 주요 뉴스와 국가 간 관계를 한눈에 보는 실시간 대시보드">
+  <meta name="theme-color" content="#05060d">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%2305060d' stroke='%23a78bfa' stroke-width='2'/%3E%3Cpath d='M5 16h22M16 3a20 20 0 0 1 0 26M16 3a20 20 0 0 0 0 26' fill='none' stroke='%23a78bfa' stroke-width='1.5'/%3E%3Ccircle cx='22' cy='11' r='3' fill='%23fb7185'/%3E%3C/svg%3E">
+
+  <!-- Korean-first UI font (Pretendard) — falls back to system fonts offline -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&display=swap">
+
+  <!-- Three.js and Globe.gl -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/globe.gl@2.32.1/dist/globe.gl.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css?v=20261121_ux7">
+</head>
+<body>
+
+  <!-- 3D globe -->
+  <div id="globeViz" role="region" aria-label="3D 지구본: 드래그해 회전, 휠로 확대"></div>
+  <div class="cyber-overlay" aria-hidden="true"></div>
+  <div id="globeTooltip" class="is-hidden" role="tooltip"></div>
+  <div id="uiTip" class="ui-tip is-hidden" role="tooltip"></div>
+  <p id="feedStatus" class="sr-only" role="status" aria-live="polite"></p>
+  <div id="globeEmptyState" class="globe-empty is-hidden" role="status">
+    <span>표시할 뉴스가 없습니다</span>
+    <button type="button" class="btn-ghost btn-ghost--sm" data-action="reset-filters">모두 해제</button>
+  </div>
+  <button id="farSideHint" type="button" class="far-side-hint is-hidden" aria-label="지구 반대편 뉴스로 돌리기"></button>
+
+  <div class="hud-layer">
+
+    <!-- ================================================================
+         HEADER — brand · one category filter (doubles as legend) · tools
+         ================================================================ -->
+    <header id="appHeader" class="app-header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text">
+          <span class="brand-name">SPINNING NEWS</span>
+          <span class="brand-sub">글로벌 뉴스 레이더</span>
+        </div>
+        <span id="demoBadge" class="demo-badge is-hidden" role="note" tabindex="0" data-tip="기본 뉴스는 시연용 가상 시나리오입니다 · 실제 뉴스는 RSS·API로 연결하세요" aria-label="데모 데이터: 기본 뉴스는 시연용 가상 시나리오입니다">데모</span>
+      </div>
+
+      <nav id="categoryChips" class="cat-chips scrollbar-none" aria-label="분야 필터 (색상 범례)"></nav>
+
+      <div class="header-tools">
+        <div id="countryPicker" class="country-picker">
+          <button id="countryPickerBtn" type="button" class="tool-btn country-picker-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="countryPickerPopover" data-tip="국가별로 보기">
+            <span id="countryPickerFlag" class="cp-flag"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span>
+            <span id="countryPickerLabel" class="cp-label">전체 국가</span>
+            <svg class="cp-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div id="countryPickerPopover" class="picker-popover is-hidden" role="dialog" aria-label="국가 선택">
+            <div class="picker-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input id="countrySearchInput" type="text" placeholder="국가 검색 (예: 한국, Japan, US)" autocomplete="off" aria-label="국가 검색">
+            </div>
+            <div id="countryPillsContainer" class="picker-list custom-scrollbar" role="group" aria-label="국가 목록"></div>
+          </div>
+          <button id="clearFocusBtn" type="button" class="cp-clear is-hidden" data-tip="국가 선택 해제 (전체 보기)" aria-label="국가 선택 해제">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="tool-group">
+          <button id="toggleAutoOrbit" type="button" class="icon-btn" aria-pressed="true" data-tip="자동 회전 (R)" aria-label="자동 회전">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="5.5"/><path d="M6.5 12h11M12 6.5c1.6 1.5 1.6 9.5 0 11"/><path d="M4.2 7.5A9.5 9.5 0 0 1 20.5 9"/><path d="M20.8 5.5v3.6h-3.6"/></svg>
+          </button>
+          <button id="toggleAudio" type="button" class="icon-btn" aria-pressed="true" data-tip="효과음 끄기 (M)" aria-label="효과음 켜기/끄기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </button>
+          <button id="toggleFullscreen" type="button" class="icon-btn" data-tip="전체 화면 (F)" aria-label="전체 화면">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+          <div id="moreMenuWrap" class="more-wrap">
+            <button id="moreMenuBtn" type="button" class="icon-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="moreMenu" data-tip="더 보기" aria-label="더 보기">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+              <span id="apiStatusDot" class="status-dot more-status" data-status="off" aria-hidden="true"></span>
+            </button>
+            <div id="moreMenu" class="more-menu is-hidden" role="menu" aria-label="더 보기">
+              <button id="toggleLeftPanel" type="button" class="menu-item menu-item--panel" role="menuitemcheckbox" aria-checked="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+                <span>주요 이슈 패널</span><i class="menu-check" aria-hidden="true"></i>
+              </button>
+              <button id="toggleRightPanel" type="button" class="menu-item menu-item--panel" role="menuitemcheckbox" aria-checked="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg>
+                <span>뉴스 패널</span><i class="menu-check" aria-hidden="true"></i>
+              </button>
+              <button id="viewModeToggle" type="button" class="menu-item" role="menuitemcheckbox" aria-checked="false" title="미국 주·한국 수도권 등 주요 거점을 지구본에 표시">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>
+                <span id="viewModeLabel">세부 지역 표시</span><i class="menu-check" aria-hidden="true"></i>
+              </button>
+              <div class="menu-sep" role="separator"></div>
+              <button id="openDevApiBtn" type="button" class="menu-item" role="menuitem" title="개발자 API·실시간 수집">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+                <span>개발자 API · 실시간 수집</span>
+              </button>
+              <button id="helpBtn" type="button" class="menu-item" role="menuitem">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+                <span>단축키 · 도움말</span><kbd>?</kbd>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ================================================================
+         MAIN — left briefing · (globe) · right news feed / detail drawer
+         ================================================================ -->
+    <main class="hud-main">
+
+      <!-- LEFT: briefing -->
+      <aside id="leftSidebar" class="side-left custom-scrollbar" aria-label="브리핑">
+
+        <section id="countryDossierCard" class="panel dossier is-hidden" aria-live="polite">
+          <div class="dossier-head">
+            <span id="dossierFlag" class="dossier-flag"></span>
+            <div class="dossier-id">
+              <h2 id="dossierName" class="dossier-name">국가</h2>
+              <div id="dossierCode" class="dossier-code"></div>
+            </div>
+            <button id="closeDossierBtn" type="button" class="icon-btn icon-btn--sm" data-tip="국가 선택 해제" aria-label="국가 선택 해제">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <p id="dossierDesc" class="dossier-desc"></p>
+          <p id="dossierStats" class="dossier-code" style="margin:-4px 0 10px"></p>
+          <div class="dossier-rel">
+            <div class="rel-block rel-block--ally">
+              <span class="rel-label">동맹·협력</span>
+              <div id="dossierAlliances" class="rel-list"></div>
+            </div>
+            <div class="rel-block rel-block--rival">
+              <span class="rel-label">대치</span>
+              <div id="dossierConflicts" class="rel-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="tensionCard" class="panel tension-card" data-level="watch">
+          <div class="panel-head">
+            <h2 class="panel-title">글로벌 긴장도</h2>
+            <span id="tensionDelta" class="tension-delta" data-trend="flat">전일과 같음</span>
+          </div>
+          <div class="tension-row">
+            <span id="tensionMeterValue" class="tension-value">--</span>
+            <span class="tension-max">/ 100</span>
+            <span id="defconLevel" class="tension-level">주의</span>
+          </div>
+          <div class="tension-track" aria-hidden="true">
+            <div id="tensionMeterBar" class="tension-fill" style="width: 50%"></div>
+          </div>
+          <div id="tensionCaption" class="tension-caption">전 세계</div>
+          <div id="tensionDrivers" class="tension-drivers"></div>
+        </section>
+
+        <section id="topStoriesCard" class="panel stories-card">
+          <div class="panel-head">
+            <div class="panel-head-text">
+              <h2 id="topStoriesTitle" class="panel-title">지금 주요 이슈</h2>
+              <span id="topStoriesCaption" class="panel-hint"></span>
+            </div>
+            <button id="tourBtn" type="button" class="btn-ghost btn-ghost--sm tour-btn" title="주요 이슈를 차례로 지구본에서 보여줍니다">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>둘러보기
+            </button>
+          </div>
+          <div id="tourProgress" class="tour-progress" aria-hidden="true"><i></i></div>
+          <ol id="topStoriesList" class="story-list"></ol>
+        </section>
+
+      </aside>
+      <button id="briefTab" type="button" class="brief-tab" aria-controls="leftSidebar">
+        주요 이슈 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+
+      <!-- RIGHT: news feed -->
+      <aside id="rightSidebar" class="side-right feed-panel" aria-label="뉴스 피드">
+        <button id="feedSheetToggle" type="button" class="sheet-handle" aria-expanded="false" aria-controls="newsFeedList">
+          <span class="sheet-grip" aria-hidden="true"></span>
+          <span class="sheet-peek-row"><span id="feedSheetTitle">최신 뉴스</span><span id="feedSheetCount" class="num">0건</span></span>
+          <span id="feedSheetPeek" class="sheet-peek"></span>
+        </button>
+        <div id="sheetSummary" class="sheet-summary"></div>
+
+        <div class="feed-head">
+          <h2 class="feed-title">
+            <span id="feedLiveMark" class="feed-live is-hidden" title="실시간 수신 연결됨"><i aria-hidden="true"></i>실시간</span>
+            <span id="feedTitleText">최신 뉴스</span>
+          </h2>
+          <span id="feedCountBadge" class="count-badge">0건</span>
+        </div>
+
+        <div class="feed-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="newsSearchInput" type="text" placeholder="국가·지역·키워드 검색 (예: 이란, 반도체)" autocomplete="off" aria-label="뉴스 검색">
+          <button id="searchClearBtn" type="button" class="search-clear is-hidden" aria-label="검색어 지우기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div id="feedActiveFilters" class="active-filters is-hidden" aria-label="적용 중인 필터"></div>
+
+        <div id="newsFeedList" class="feed-list custom-scrollbar"></div>
+      </aside>
+
+      <!-- RIGHT (overlay): event detail drawer — the globe stays visible -->
+      <aside id="eventModal" class="detail-drawer is-hidden" role="dialog" aria-modal="false" aria-labelledby="modalTitle" aria-hidden="true">
+        <div class="dd-head">
+          <button id="detailBackBtn" type="button" class="btn-ghost dd-back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>뉴스 목록
+          </button>
+          <div class="dd-nav">
+            <button id="detailPrevBtn" type="button" class="icon-btn icon-btn--sm" data-tip="이전 소식 (←)" aria-label="이전 소식">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span id="detailPosition" class="dd-pos"></span>
+            <button id="detailNextBtn" type="button" class="icon-btn icon-btn--sm" data-tip="다음 소식 (→)" aria-label="다음 소식">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+          <button id="modalCloseBtn" type="button" class="icon-btn icon-btn--sm" data-tip="닫기 (Esc)" aria-label="닫기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="dd-body custom-scrollbar">
+          <div class="dd-kicker">
+            <span id="modalLiveChip" class="live-chip is-hidden">실시간</span>
+            <span id="modalTypeBadge" class="cat-pill"></span>
+            <span id="modalScope" class="badge-scope"></span>
+            <span id="modalDate" class="dd-date"></span>
+          </div>
+          <h2 id="modalTitle" class="dd-title" tabindex="-1"></h2>
+          <p id="modalDemoNote" class="dd-demo-note is-hidden" role="note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            <span id="modalDemoNoteText"></span>
+          </p>
+
+          <dl class="dd-facts">
+            <dt>장소</dt>
+            <dd id="modalLocation"></dd>
+            <dt>관련국</dt>
+            <dd id="modalWho" class="dd-who"></dd>
+            <dt>영향도</dt>
+            <dd class="dd-impact">
+              <span id="modalImpactScore" class="impact-chip">--</span>
+              <span id="modalSeverity" class="dd-tier"></span>
+              <span class="dd-impact-track" aria-hidden="true"><i id="modalImpactBar"></i></span>
+            </dd>
+          </dl>
+
+          <p id="modalSummary" class="dd-dek"></p>
+
+          <section id="modalDetailsSection" class="dd-section">
+            <h3 class="dd-section-title">상세 내용</h3>
+            <p id="modalDetails" class="dd-details"></p>
+          </section>
+
+          <section id="modalArcsSection" class="dd-section">
+            <h3 class="dd-section-title">연결 관계</h3>
+            <div id="modalArcsList" class="dd-rows"></div>
+          </section>
+
+          <section class="dd-section">
+            <h3 class="dd-section-title">관련 국가·기관</h3>
+            <div id="modalPartiesList" class="party-chips"></div>
+          </section>
+
+          <section class="dd-section">
+            <h3 class="dd-section-title">출처 <span id="modalSourcesCount" class="dd-count"></span></h3>
+            <div id="modalSources" class="dd-rows"></div>
+          </section>
+
+          <div id="modalTags" class="dd-tags"></div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- ================================================================
+         FOOTER — playback + timeline with per-day density
+         ================================================================ -->
+    <footer id="appFooter" class="app-footer">
+      <div class="playback">
+        <button id="playPauseBtn" type="button" class="play-btn" data-tip="날짜를 자동으로 넘기며 보기 (Space)"></button>
+        <div class="speed-group" role="group" aria-label="재생 속도">
+          <button type="button" data-speed="1" class="speed-btn is-active" aria-pressed="true">1x</button>
+          <button type="button" data-speed="2" class="speed-btn" aria-pressed="false">2x</button>
+          <button type="button" data-speed="5" class="speed-btn" aria-pressed="false">5x</button>
+        </div>
+      </div>
+
+      <div class="timeline">
+        <div class="timeline-head">
+          <span class="timeline-title">타임라인</span>
+          <span id="timelineRangeLabel" class="timeline-range"></span>
+          <span id="currentDateDisplay" class="timeline-date"></span>
+        </div>
+        <div class="timeline-track">
+          <div id="timelineDensity" class="timeline-bars"></div>
+          <input id="timelineSlider" type="range" min="0" max="6" value="6" step="1" class="timeline-slider" aria-label="이 날짜까지의 소식 보기">
+        </div>
+      </div>
+
+      <div class="footer-hint" aria-hidden="true">
+        <span class="footer-hint-main"><i class="key-dot key-dot--s"></i><i class="key-dot"></i> 크기 = 영향도 · <i class="key-line"></i> 선 = 국가 간 관계</span>
+        <span>점·선을 누르면 상세 · <kbd>?</kbd> 단축키</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- First-run hint (shown on the first 3 visits) -->
+  <div id="onboardingHint" class="onboarding-hint is-hidden" role="note">
+    <span>지구본의 <b>점·선</b>을 누르면 상세 정보</span>
+    <span class="hint-sep" aria-hidden="true">·</span>
+    <span><b>국가 이름</b>을 누르면 그 나라 뉴스만</span>
+    <span class="hint-sep" aria-hidden="true">·</span>
+    <span><kbd>?</kbd> 단축키</span>
+    <button type="button" class="hint-close" data-action="dismiss-hint" aria-label="안내 닫기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <!-- Help / shortcuts -->
+  <div id="helpModal" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="dev-modal help-modal">
+      <div class="dev-head">
+        <h2 id="helpTitle" class="dev-title">사용법 · 단축키</h2>
+        <button id="helpCloseBtn" type="button" class="icon-btn" title="닫기 (Esc)" aria-label="닫기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <ul class="help-tips">
+        <li><b>점</b>은 사건이 일어난 곳입니다. 클수록 영향이 크고, 흐릴수록 지난 소식입니다.</li>
+        <li><b>선</b>은 국가 간 관계입니다. 뉴스나 선을 고르면 그 선이 분야 색(위쪽 분야 버튼의 색)으로 강조됩니다.</li>
+        <li><b>작은 고리</b>는 관련국·연결 지점입니다. 뉴스를 고르면 나라 이름과 관계가 함께 표시됩니다.</li>
+        <li>점이나 선, 목록의 뉴스를 누르면 상세 정보가 열리고 지구본이 그곳을 비춥니다.</li>
+        <li>국가 이름표나 국경을 누르면 그 나라 뉴스만 모아 봅니다. 다시 누르면 전체로 돌아갑니다.</li>
+      </ul>
+      <dl class="help-keys">
+        <dt><kbd>/</kbd></dt><dd>뉴스 검색</dd>
+        <dt><kbd>Esc</kbd></dt><dd>닫기 · 검색어 지우기</dd>
+        <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>날짜 이동 (상세 보기 중에는 이전·다음 뉴스)</dd>
+        <dt><kbd>Space</kbd></dt><dd>타임라인 재생 / 일시정지</dd>
+        <dt><kbd>R</kbd></dt><dd>자동 회전 켜기·끄기</dd>
+        <dt><kbd>M</kbd></dt><dd>효과음 켜기·끄기</dd>
+        <dt><kbd>F</kbd></dt><dd>전체 화면</dd>
+        <dt><kbd>?</kbd></dt><dd>이 도움말</dd>
+      </dl>
+      <label class="help-pref"><input id="shortcutsToggle" type="checkbox" checked> 한 글자 단축키 사용 ( / · ? · R · M · F )</label>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       LIVE INGEST TOAST (click to open)
+       ================================================================ -->
+  <div id="liveIntelToast" class="live-toast is-hidden" role="status" aria-live="polite">
+    <span class="live-toast-dot" aria-hidden="true"></span>
+    <span id="liveToastKicker" class="live-toast-kicker">실시간 속보</span>
+    <span id="liveToastTitle" class="live-toast-title"></span>
+    <button type="button" class="live-toast-cta">보기 →</button>
+    <button type="button" class="live-toast-close" data-action="dismiss-toast" aria-label="알림 닫기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <!-- ================================================================
+       DEVELOPER API & INGESTION PIPELINE MODAL
+       ================================================================ -->
+  <div id="devApiModal" class="modal-backdrop is-hidden" role="dialog" aria-modal="true" aria-labelledby="devApiTitle">
+    <div class="dev-modal">
+      <div class="dev-head">
+        <div>
+          <div class="dev-title-row">
+            <span class="status-dot" data-status="on" aria-hidden="true"></span>
+            <h2 id="devApiTitle" class="dev-title">개발자 API · 데이터 파이프라인</h2>
+          </div>
+          <p class="dev-sub">REST 웹훅으로 이벤트를 보내면 SSE로 지구본에 즉시 표시됩니다. (python server.py 로 실행 시)</p>
+        </div>
+        <button id="devApiCloseBtn" type="button" class="icon-btn" title="닫기 (Esc)" aria-label="닫기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="dev-section">
+        <h3 class="dev-section-title">원클릭 테스트 — 누르면 지구본에 바로 나타납니다</h3>
+        <div class="dev-actions">
+          <button id="btnTestConflict" type="button" class="dev-action" style="--cat:#f43f5e"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" x2="19" y1="19" y2="13"/><line x1="16" x2="20" y1="16" y2="20"/><line x1="19" x2="21" y1="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" x2="9" y1="14" y2="18"/><line x1="7" x2="4" y1="17" y2="20"/><line x1="3" x2="5" y1="19" y2="21"/></svg>분쟁 이벤트 보내기 (US ↔ IR)</button>
+          <button id="btnTestTreaty" type="button" class="dev-action" style="--cat:#10b981"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/></svg>외교 이벤트 보내기 (KR ↔ US)</button>
+          <button id="btnPollRss" type="button" class="dev-action" style="--cat:#38bdf8"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>구글 뉴스 RSS 가져오기</button>
+        </div>
+        <div id="devApiFeedback" class="dev-feedback is-hidden" role="status"></div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-endpoint">
+          <span>POST 웹훅 URL</span>
+          <code id="devApiEndpoint">http://localhost:8080/api/events</code>
+        </div>
+        <div class="code-box">
+          <div class="code-box-head">
+            <span>cURL 예시</span>
+            <button id="btnCopyCurl" type="button" class="btn-ghost btn-ghost--sm">복사</button>
+          </div>
+          <pre id="curlSnippet" class="custom-scrollbar">curl -X POST http://localhost:8080/api/events \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "[테스트] 호르무즈 해협 군사 억제 연합 순찰 전개",
+    "category": "conflict",
+    "primaryCountry": "IR",
+    "countryCodes": ["US", "IR"],
+    "summary": "다국적 연합 해군이 주요 해상 통로 순찰을 전면 개시했습니다.",
+    "impactScore": 88,
+    "demo": true
+  }'</pre>
+        </div>
+        <p class="dev-sub dev-auth-note">내 컴퓨터(127.0.0.1)에서는 기본적으로 토큰 없이 동작합니다. 서버를 외부에 공개하면(<code>--host 0.0.0.0</code>) 쓰기 요청에 토큰이 필요합니다: <code>-H "Authorization: Bearer &lt;토큰&gt;"</code></p>
+      </div>
+
+      <div class="dev-foot">
+        <span>지원 소스: REST 웹훅 · SSE · RSS · GDELT · AI 추출기</span>
+        <span>GET /api/stream</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="flags.js?v=20261121_ux7"></script>
+  <script src="countries-data.js?v=20261121_ux7"></script>
+  <script src="news-data.js?v=20261121_ux7"></script>
+  <script src="audio.js?v=20261121_ux7"></script>
+  <script src="app.js?v=20261121_ux7"></script>
+</body>
+</html>

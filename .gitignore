@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local-only: pre-redesign backups, editor and Claude Code settings
+.backup/
+.claude/
+.vscode/
+.idea/
+*.bak
