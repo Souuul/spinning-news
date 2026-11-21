@@ -14,9 +14,26 @@
   <i>Plug your custom newsfeeds, RSS, GDELT, or AI scrapers straight into a high-performance, real-time 3D Globe with razor-thin glowing filament arcs.</i>
 </p>
 
-[🚀 Quick Start](#-quick-start-under-60-seconds) • [⚡ Ingestion Pipeline](#-pluggable-data-pipeline-architecture) • [📡 REST API](#-rest-api--webhook-reference) • [🤖 AI Extractor](#-ai-news-to-3d-pipeline) • [🔒 Security](#-security) • [💰 Monetization](#-commercial-monetization-roadmap)
+[🌍 Live Demo](https://souuul.github.io/spinning-news/) • [🚀 Quick Start](#-quick-start-under-60-seconds) • [⚡ Ingestion Pipeline](#-pluggable-data-pipeline-architecture) • [📡 REST API](#-rest-api--webhook-reference) • [🤖 AI Extractor](#-ai-news-to-3d-pipeline) • [🔒 Security](#-security) • [💰 Monetization](#-commercial-monetization-roadmap)
 
 </div>
+
+<p align="center">
+  <a href="https://souuul.github.io/spinning-news/"><img src="docs/screenshot-desktop.png" alt="Spinning News: a 3D globe with short news labels and glowing arcs between countries, a briefing panel on the left and a news feed on the right" width="100%"></a>
+</p>
+
+<p align="center"><b><a href="https://souuul.github.io/spinning-news/">🌍 Open the live demo</a></b> — runs right in your browser with the bundled demo stories (live ingestion needs <code>python server.py</code>).</p>
+
+<table>
+  <tr>
+    <td width="70%"><img src="docs/screenshot-story.png" alt="A story opened: its arcs, parties and relation are highlighted on the globe and the story panel shows the details"></td>
+    <td><img src="docs/screenshot-mobile.png" alt="Phone layout: the globe on top and the news feed as a bottom sheet"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Open a story: its arcs, parties and relation light up</sub></td>
+    <td align="center"><sub>Phone layout</sub></td>
+  </tr>
+</table>
 
 ---
 
@@ -78,7 +95,7 @@ python server.py 8080
 Open your browser at **[http://localhost:8080](http://localhost:8080)**. By default the server listens on `127.0.0.1`, i.e. this computer only — see [Security](#-security) to open it to other devices.
 
 ### 2. Direct File Mode (no server)
-Double-click `index.html` in your file explorer. The globe and every interactive feature work with the bundled demo stories, without the Python server (`countries-data.js` stands in for the border download). You still need an internet connection: three.js, globe.gl, the fonts and the flag images load from CDNs. Live ingestion (API, SSE, RSS) needs the server.
+Double-click `index.html` in your file explorer. The globe and every interactive feature work with the bundled demo stories, without the Python server (`countries-data.js` stands in for the border download). You still need an internet connection: three.js, globe.gl, the fonts and the flag images load from CDNs. Live ingestion (API, SSE, RSS) needs the server. The [live demo](https://souuul.github.io/spinning-news/) on GitHub Pages runs the same way.
 
 ---
 

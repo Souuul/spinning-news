@@ -4199,10 +4199,17 @@ function normalizeIncomingEvent(evt, opts = {}) {
   return out;
 }
 
+// The live API needs server.py. Opened as a file or from a static host (the GitHub Pages demo)
+// there is none: the app then runs on the bundled stories without any API requests.
+const STATIC_DEMO_HOST = /\.github\.io$/i.test(location.hostname);
+function hasLiveServer() {
+  return location.protocol.startsWith("http") && !STATIC_DEMO_HOST;
+}
+
 function initLiveApiStream() {
   const dot0 = document.getElementById("apiStatusDot");
-  if (!location.protocol.startsWith("http")) {
-    // opened as a file: no server, no requests, no console errors
+  if (!hasLiveServer()) {
+    // no server: no requests, no console errors
     if (dot0) dot0.setAttribute("data-status", "off");
     return;
   }
@@ -4232,7 +4239,7 @@ function initLiveApiStream() {
     if (more) more.setAttribute("data-tip", ok ? "더 보기 · 실시간 수신 연결됨" : "더 보기 · 실시간 수신 끊김");
   };
   setStatus(false);
-  if (window.EventSource && location.protocol.startsWith("http")) {
+  if (window.EventSource) {
     // The browser retries a dropped stream by itself but gives up for good when the server refuses
     // one (e.g. 503 while it is busy): then reconnect after a pause that grows up to a minute.
     let retryMs = 5000;
@@ -4383,9 +4390,9 @@ function initDevApiModal() {
   const feedback = document.getElementById("devApiFeedback");
 
   const endpoint = document.getElementById("devApiEndpoint");
-  if (endpoint && location.protocol.startsWith("http")) endpoint.textContent = `${location.origin}/api/events`;
+  if (endpoint && hasLiveServer()) endpoint.textContent = `${location.origin}/api/events`;
   const snippet = document.getElementById("curlSnippet");
-  if (snippet && location.protocol.startsWith("http")) snippet.textContent = snippet.textContent.replace("http://localhost:8080", location.origin);
+  if (snippet && hasLiveServer()) snippet.textContent = snippet.textContent.replace("http://localhost:8080", location.origin);
 
   if (openBtn) openBtn.addEventListener("click", openDevModal);
   if (closeBtn) closeBtn.addEventListener("click", closeDevModal);
@@ -4409,8 +4416,8 @@ function initDevApiModal() {
   // POST JSON → { ok, status, data }. Only a network failure rejects; HTTP errors come back as
   // { ok: false } with the server's { error, code } body (or {} when it isn't JSON).
   function postJson(url, payload) {
-    // opened as a file there is no server: fail like a network error, minus the console error
-    if (!location.protocol.startsWith("http")) return Promise.reject(new TypeError("Failed to fetch"));
+    // no server (file or static demo host): fail like a network error, minus the console error
+    if (!hasLiveServer()) return Promise.reject(new TypeError(STATIC_DEMO_HOST ? "서버 없이 보는 데모 페이지입니다" : "Failed to fetch"));
     return fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
